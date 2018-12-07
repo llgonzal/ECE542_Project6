@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[7]:
+# In[20]:
 
 
 import numpy as np
@@ -78,6 +78,7 @@ def LoadImages(imgurl, cimg):
         res = np.fromstring(gz.read(cimg * crow * ccol),
                             dtype=np.uint8)
     os.remove(gzfname)
+    print(cimg,crow,ccol)
     return res.reshape((cimg, crow * ccol))
 
 def LoadLabels(laburl, cimg):
@@ -167,7 +168,7 @@ def getData(original_dim):
     return x_train, x_test, y_train, y_test
 
 
-# In[ ]:
+# In[35]:
 
 logfile = './logs/tb_test'
 original_dim = 784
@@ -185,6 +186,7 @@ for latent_dim in [2, 10, 20]:
                                     x_train_orig, y_train_orig, test_size=0.15)
     vae, encoder, decoder = getModel(intermediate_dim,latent_dim,original_dim,epsilon_std)
 
+    # To run without tensorboard, comment out next line, and remove the callbacks parameter from vae.fit
     tensorboardcall = [keras.callbacks.TensorBoard(log_dir=logfile, histogram_freq=0, batch_size=batch_size, write_graph=True,
                                 write_grads=True, write_images=True, embeddings_freq=0, embeddings_layer_names=None,
                                 )]
@@ -217,14 +219,60 @@ for latent_dim in [2, 10, 20]:
     # through the inverse CDF (ppf) of the Gaussian to produce values
     # of the latent variables z, since the prior of the latent space
     # is Gaussian
-    u_grid = np.dstack(np.meshgrid(np.linspace(0.05, 0.95, n),
-                                   np.linspace(0.05, 0.95, n)))
-    z_grid = norm.ppf(u_grid)
-    x_decoded = decoder.predict(z_grid.reshape(n*n, 2))
+    # display a 2D manifold of the images
+    n = 15  # figure with 15x15 images
+    quantile_min = 0.01
+    quantile_max = 0.99
 
+    # linearly spaced coordinates on the unit square were transformed
+    # through the inverse CDF (ppf) of the Gaussian to produce values
+    # of the latent variables z, since the prior of the latent space
+    # is Gaussian
+    #img_rows, img_cols, img_chns = x_train.shape
+    print(x_train.shape)
+
+
+    z1 = norm.ppf(np.linspace(quantile_min, quantile_max,n))
+    z2 = norm.ppf(np.linspace(quantile_max, quantile_min, n*(latent_dim/2)))
+    z_grid = np.dstack(np.meshgrid(z1, z2))
+
+    x_pred_grid = decoder.predict(z_grid.reshape(n*n, latent_dim))                           .reshape(n, n, 28, 28)
+    x_decoded = decoder.predict(z_grid.reshape(n*n, latent_dim))   
     x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
 
     plt.figure(figsize=(10, 10))
     plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
     plt.show()
+
+
+# In[34]:
+
+# display a 2D manifold of the images
+n = 15  # figure with 15x15 images
+quantile_min = 0.01
+quantile_max = 0.99
+
+# linearly spaced coordinates on the unit square were transformed
+# through the inverse CDF (ppf) of the Gaussian to produce values
+# of the latent variables z, since the prior of the latent space
+# is Gaussian
+#img_rows, img_cols, img_chns = x_train.shape
+print(x_train.shape)
+
+
+z1 = norm.ppf(np.linspace(quantile_min, quantile_max,n))
+z2 = norm.ppf(np.linspace(quantile_max, quantile_min, n*(latent_dim/2)))
+z_grid = np.dstack(np.meshgrid(z1, z2))
+
+x_pred_grid = decoder.predict(z_grid.reshape(n*n, latent_dim))                       .reshape(n, n, 28, 28)
+x_decoded = decoder.predict(z_grid.reshape(n*n, latent_dim))   
+x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
+
+plt.figure(figsize=(10, 10))
+plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
+plt.show()
+
+plt.figure(figsize=(10, 10))
+plt.imshow(np.block(list(map(list, z_grid))), cmap='gray')
+plt.show()
 
