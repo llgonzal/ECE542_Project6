@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[20]:
+# In[102]:
 
 
 import numpy as np
@@ -19,6 +19,7 @@ from keras import backend as K
 from keras.layers import Input, Dense, Lambda, Layer, Add, Multiply
 from keras.models import Model, Sequential
 from keras.datasets import mnist
+from keras.losses import mse
 
 from sklearn.model_selection import train_test_split
 
@@ -30,6 +31,7 @@ def nll(y_true, y_pred):
     # keras.losses.binary_crossentropy gives the mean
     # over the last axis. we require the sum
     return K.sum(K.binary_crossentropy(y_true, y_pred), axis=-1)
+    #return K.sum(mse(y_true, y_pred), axis=-1)
 
 
 class KLDivergenceLayer(Layer):
@@ -168,111 +170,106 @@ def getData(original_dim):
     return x_train, x_test, y_train, y_test
 
 
-# In[35]:
+# In[103]:
 
 logfile = './logs/tb_test'
 original_dim = 784
 intermediate_dim = 256
-batch_size = 100
-epochs = 10
+batch_size = 50
+epochs = 50
 epsilon_std = 1.0
 x_train_orig, x_test, y_train_orig, y_test = getData(original_dim)
 
-for latent_dim in [2, 10, 20]:
-    K.clear_session()
-
-    
+for epsilon_std in [1]:
     x_train, x_val, y_train, y_val = train_test_split(
                                     x_train_orig, y_train_orig, test_size=0.15)
-    vae, encoder, decoder = getModel(intermediate_dim,latent_dim,original_dim,epsilon_std)
-
-    # To run without tensorboard, comment out next line, and remove the callbacks parameter from vae.fit
-    tensorboardcall = [keras.callbacks.TensorBoard(log_dir=logfile, histogram_freq=0, batch_size=batch_size, write_graph=True,
-                                write_grads=True, write_images=True, embeddings_freq=0, embeddings_layer_names=None,
-                                )]
+    for latent_dim in [10, 20]:
+        K.clear_session()
 
 
-    vae.fit(x_train,
-            x_train,
-            shuffle=True,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_data=(x_val, x_val),
-            callbacks=tensorboardcall)
+        logfile = './logs/final_LD_epoch50_' + str(latent_dim) + '_eps' + str(epsilon_std)
+        print(logfile)
+        vae, encoder, decoder = getModel(intermediate_dim,latent_dim,original_dim,epsilon_std)
+
+        # To run without tensorboard, comment out next line, and remove the callbacks parameter from vae.fit
+        tensorboardcall = [keras.callbacks.TensorBoard(log_dir=logfile, histogram_freq=0, batch_size=batch_size, write_graph=True,
+                                    write_grads=True, write_images=True, embeddings_freq=0, embeddings_layer_names=None,
+                                    )]
+
+
+        vae.fit(x_train,
+                x_train,
+                shuffle=True,
+                epochs=epochs,
+                batch_size=batch_size,
+                validation_data=(x_val, x_val),
+                callbacks=tensorboardcall)
 
 
 
-    # display a 2D plot of the digit classes in the latent space
+        # display a 2D plot of the digit classes in the latent space
+        fig1name = logfile + 'manifold.png'
+        fig2name = logfile + 'zspace.png'
+        fig3name = logfile + 'randomData.png'
+        z_test = encoder.predict(x_test, batch_size=batch_size)
+        fig1 = plt.figure(figsize=(6, 6))
+        plt.scatter(z_test[:, 0], z_test[:, 1], c=y_test,
+                    alpha=.4, s=3**2, cmap='viridis')
+        plt.colorbar()
+        plt.show()
+        fig1.savefig(fig1name, bbox_inches='tight')
 
-    z_test = encoder.predict(x_test, batch_size=batch_size)
-    plt.figure(figsize=(6, 6))
-    plt.scatter(z_test[:, 0], z_test[:, 1], c=y_test,
-                alpha=.4, s=3**2, cmap='viridis')
-    plt.colorbar()
-    plt.show()
+        # display a 2D manifold of the digits
+        n = 15  # figure with 15x15 digits
+        digit_size = 28
 
-    # display a 2D manifold of the digits
-    n = 15  # figure with 15x15 digits
-    digit_size = 28
+        # linearly spaced coordinates on the unit square were transformed
+        # through the inverse CDF (ppf) of the Gaussian to produce values
+        # of the latent variables z, since the prior of the latent space
+        # is Gaussian
+        # display a 2D manifold of the images
+        n = 15  # figure with 15x15 images
+        quantile_min = 0.01
+        quantile_max = 0.99
 
-    # linearly spaced coordinates on the unit square were transformed
-    # through the inverse CDF (ppf) of the Gaussian to produce values
-    # of the latent variables z, since the prior of the latent space
-    # is Gaussian
-    # display a 2D manifold of the images
-    n = 15  # figure with 15x15 images
-    quantile_min = 0.01
-    quantile_max = 0.99
-
-    # linearly spaced coordinates on the unit square were transformed
-    # through the inverse CDF (ppf) of the Gaussian to produce values
-    # of the latent variables z, since the prior of the latent space
-    # is Gaussian
-    #img_rows, img_cols, img_chns = x_train.shape
-    print(x_train.shape)
-
-
-    z1 = norm.ppf(np.linspace(quantile_min, quantile_max,n))
-    z2 = norm.ppf(np.linspace(quantile_max, quantile_min, n*(latent_dim/2)))
-    z_grid = np.dstack(np.meshgrid(z1, z2))
-
-    x_pred_grid = decoder.predict(z_grid.reshape(n*n, latent_dim))                           .reshape(n, n, 28, 28)
-    x_decoded = decoder.predict(z_grid.reshape(n*n, latent_dim))   
-    x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
-
-    plt.figure(figsize=(10, 10))
-    plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
-    plt.show()
+        # linearly spaced coordinates on the unit square were transformed
+        # through the inverse CDF (ppf) of the Gaussian to produce values
+        # of the latent variables z, since the prior of the latent space
+        # is Gaussian
+        #img_rows, img_cols, img_chns = x_train.shape
+        print(x_train.shape)
 
 
-# In[34]:
+        z1 = norm.ppf(np.linspace(quantile_min, quantile_max,n))
+        z2 = norm.ppf(np.linspace(quantile_max, quantile_min, n*(latent_dim/2)))
+        z_grid = np.dstack(np.meshgrid(z1, z2))
 
-# display a 2D manifold of the images
-n = 15  # figure with 15x15 images
-quantile_min = 0.01
-quantile_max = 0.99
+        x_pred_grid = decoder.predict(z_grid.reshape(n*n, latent_dim))                               .reshape(n, n, 28, 28)
+        x_decoded = decoder.predict(z_grid.reshape(n*n, latent_dim))   
+        x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
 
-# linearly spaced coordinates on the unit square were transformed
-# through the inverse CDF (ppf) of the Gaussian to produce values
-# of the latent variables z, since the prior of the latent space
-# is Gaussian
-#img_rows, img_cols, img_chns = x_train.shape
-print(x_train.shape)
+        fig2 = plt.figure(figsize=(10, 10))
+        plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
+        plt.show()
+        fig2.savefig(fig2name, bbox_inches='tight')
+        
+        ztemp1 =  np.asarray([np.random.normal(0, 1, latent_dim) for _ in range(n*n)])
+        x_decoded = decoder.predict(ztemp1.reshape(n*n, latent_dim)) 
+        x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
+
+        fig = plt.figure(figsize=(10, 10))
+        plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
+        plt.show()
+
+        fig.savefig(fig3name, bbox_inches='tight')
 
 
-z1 = norm.ppf(np.linspace(quantile_min, quantile_max,n))
-z2 = norm.ppf(np.linspace(quantile_max, quantile_min, n*(latent_dim/2)))
-z_grid = np.dstack(np.meshgrid(z1, z2))
+# In[95]:
 
-x_pred_grid = decoder.predict(z_grid.reshape(n*n, latent_dim))                       .reshape(n, n, 28, 28)
-x_decoded = decoder.predict(z_grid.reshape(n*n, latent_dim))   
-x_decoded = x_decoded.reshape(n, n, digit_size, digit_size)
 
-plt.figure(figsize=(10, 10))
-plt.imshow(np.block(list(map(list, x_decoded))), cmap='gray')
-plt.show()
 
-plt.figure(figsize=(10, 10))
-plt.imshow(np.block(list(map(list, z_grid))), cmap='gray')
-plt.show()
+
+# In[110]:
+
+
 
